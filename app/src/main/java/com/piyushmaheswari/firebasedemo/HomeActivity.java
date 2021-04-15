@@ -1,10 +1,10 @@
 package com.piyushmaheswari.firebasedemo;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-
+import android.app.ProgressDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -12,7 +12,11 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -23,16 +27,25 @@ import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.UUID;
 
 public class HomeActivity extends AppCompatActivity {
 
+    // request code
+    private final int PICK_IMAGE_REQUEST = 22;
+    // instance for firebase storage and StorageReference
+    FirebaseStorage storage;
     private Button logout, addValue;
     private EditText addValueText;
     private ListView listView;
+    // Uri indicates, where the image will be picked from
+    private Uri filePath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,19 +68,19 @@ public class HomeActivity extends AppCompatActivity {
             }
         });
 
-        addValue.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String text = addValueText.getText().toString();
-
-                if (text.isEmpty()) {
-                    Toast.makeText(HomeActivity.this, "No Value", Toast.LENGTH_SHORT).show();
-                } else {
-//                    FirebaseDatabase.getInstance().getReference().child("Piyush").push().child("Name").setValue(text);
-                    FirebaseDatabase.getInstance().getReference().child("Languages").child("Name").setValue(text);
-                }
-            }
-        });
+//        addValue.setOnClickListener(new View.OnClickListener() {
+//            @Override
+//            public void onClick(View v) {
+//                String text = addValueText.getText().toString();
+//
+//                if (text.isEmpty()) {
+//                    Toast.makeText(HomeActivity.this, "No Value", Toast.LENGTH_SHORT).show();
+//                } else {
+////                    FirebaseDatabase.getInstance().getReference().child("Piyush").push().child("Name").setValue(text);
+//                    FirebaseDatabase.getInstance().getReference().child("Languages").child("Name").setValue(text);
+//                }
+//            }
+//        });
 
         final ArrayList<String> list = new ArrayList<>();
         final ArrayAdapter arrayAdapter = new ArrayAdapter(this, R.layout.list_item, list);
@@ -131,8 +144,7 @@ public class HomeActivity extends AppCompatActivity {
         firebaseFirestore.collection("maps").document("names").set(map).addOnCompleteListener(new OnCompleteListener<Void>() {
             @Override
             public void onComplete(@NonNull Task<Void> task) {
-                if(task.isSuccessful())
-                {
+                if (task.isSuccessful()) {
                     Toast.makeText(HomeActivity.this, "Values Added", Toast.LENGTH_SHORT).show();
                 }
             }
@@ -193,8 +205,89 @@ public class HomeActivity extends AppCompatActivity {
             }
         });
 
+        /**
+         * Upload image in db
+         * */
 
+        addValue.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SelectImage();
+            }
+        });
 
+    }
 
+    private void SelectImage() {
+
+        // Defining Implicit Intent to mobile gallery
+        Intent intent = new Intent();
+        intent.setType("image/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(
+                Intent.createChooser(
+                        intent,
+                        "Select Image from here..."),
+                PICK_IMAGE_REQUEST);
+    }
+
+    // Override onActivityResult method
+    @Override
+    protected void onActivityResult(int requestCode,
+                                    int resultCode,
+                                    Intent data) {
+
+        super.onActivityResult(requestCode,
+                resultCode,
+                data);
+
+        // checking request code and result code
+        // if request code is PICK_IMAGE_REQUEST and
+        // resultCode is RESULT_OK
+        // then set image in the image view
+        if (requestCode == PICK_IMAGE_REQUEST
+                && resultCode == RESULT_OK
+                && data != null
+                && data.getData() != null) {
+
+            // Get the Uri of data
+            filePath = data.getData();
+            uploadImage();
+        }
+    }
+
+    // UploadImage method
+    private void uploadImage() {
+        if (filePath != null) {
+
+            final ProgressDialog progressDialog
+                    = new ProgressDialog(this);
+            progressDialog.setTitle("Uploading...");
+            progressDialog.show();
+
+            // Defining the child of storageReference
+            StorageReference ref
+                    = FirebaseStorage.getInstance().getReference().child("uploads")
+                    .child(
+                            "images/"
+                                    + UUID.randomUUID().toString());
+
+            ref.putFile(filePath).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+                @Override
+                public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                    ref.getDownloadUrl().addOnSuccessListener(new OnSuccessListener<Uri>() {
+                        @Override
+                        public void onSuccess(Uri uri) {
+                            String uti = uri.toString();
+
+                            Log.d("Storage", "Download url: " + uti);
+                            progressDialog.dismiss();
+                            Toast.makeText(HomeActivity.this, "Image uploaded", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            });
+
+        }
     }
 }
